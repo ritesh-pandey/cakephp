@@ -92,8 +92,10 @@ interface EntityInterface extends ArrayAccess, JsonSerializable
     public function visibleProperties();
 
     /**
-     * Returns an array with all the properties that have been set
-     * to this entity
+     * Returns an array with all the visible properties set in this entity.
+     *
+     * *Note* hidden properties are not visible, and will not be output
+     * by toArray().
      *
      * @return array
      */
@@ -139,12 +141,12 @@ interface EntityInterface extends ArrayAccess, JsonSerializable
      * This method can return null in the case there is no prior information on
      * the status of this entity.
      *
-     * If called with a boolean it will set the known status of this instance,
-     * true means that the instance is not yet persisted in the database, false
+     * If called with a boolean, this method will set the status of this instance.
+     * Using `true` means that the instance has not been persisted in the database, `false`
      * that it already is.
      *
-     * @param bool $new true if it is known this instance was persisted
-     * @return bool if it is known whether the entity was already persisted
+     * @param bool|null $new Indicate whether or not this instance has been persisted.
+     * @return bool If it is known whether the entity was already persisted
      * null otherwise
      */
     public function isNew($new = null);

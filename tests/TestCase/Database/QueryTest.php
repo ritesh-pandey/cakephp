@@ -259,6 +259,7 @@ class QueryTest extends TestCase
      */
     public function testSelectAliasedJoins()
     {
+        $this->skipIf(version_compare(PHP_VERSION, '5.6.0', '<'), 'This test fails on travis for older PHP.');
         $query = new Query($this->connection);
         $result = $query
             ->select(['title', 'name'])
@@ -336,17 +337,6 @@ class QueryTest extends TestCase
             ->innerJoin(['c' => 'comments'], ['created <' => $time], $types)
             ->execute();
         $this->assertCount(0, $result->fetchAll());
-
-        $query = new Query($this->connection);
-        $result = $query
-            ->select(['title', 'name' => 'c.comment'])
-            ->from('articles')
-            ->leftJoin(['c' => 'comments'], ['created >' => $time], $types)
-            ->execute();
-        $this->assertEquals(
-            ['title' => 'First Article', 'name' => 'Second Comment for First Article'],
-            $result->fetch('assoc')
-        );
     }
 
     /**
@@ -636,8 +626,10 @@ class QueryTest extends TestCase
 
     /**
      * Tests that passing an empty array type to any where condition will not
-     * result in an error, but in an empty result set
+     * result in a SQL error, but an internal exception
      *
+     * @expectedException Cake\Database\Exception
+     * @expectedExceptionMessage Impossible to generate condition with empty list of values for field
      * @return void
      */
     public function testSelectWhereArrayTypeEmpty()
@@ -648,7 +640,24 @@ class QueryTest extends TestCase
             ->from('comments')
             ->where(['id' => []], ['id' => 'integer[]'])
             ->execute();
-        $this->assertCount(0, $result);
+    }
+
+    /**
+     * Tests exception message for impossible condition when using an expression
+     * @expectedException Cake\Database\Exception
+     * @expectedExceptionMessage with empty list of values for field (SELECT 1)
+     * @return void
+     */
+    public function testSelectWhereArrayTypeEmptyWithExpression()
+    {
+        $query = new Query($this->connection);
+        $result = $query
+            ->select(['id'])
+            ->from('comments')
+            ->where(function ($exp, $q) {
+                return $exp->in($q->newExpr('SELECT 1'), []);
+            })
+            ->execute();
     }
 
     /**
@@ -1929,6 +1938,17 @@ class QueryTest extends TestCase
         $this->assertCount(2, $result);
         $this->assertEquals(['id' => 2], $result->fetch('assoc'));
         $this->assertEquals(['id' => 1], $result->fetch('assoc'));
+
+        $query = new Query($this->connection);
+        $query->select('id')->from('comments')
+            ->limit(1)
+            ->offset(1)
+            ->execute();
+        $dirty = $this->readAttribute($query, '_dirty');
+        $this->assertFalse($dirty);
+        $query->offset(2);
+        $dirty = $this->readAttribute($query, '_dirty');
+        $this->assertTrue($dirty);
     }
 
     /**
@@ -2463,6 +2483,35 @@ class QueryTest extends TestCase
     }
 
     /**
+     * Test update with callable in set
+     *
+     * @return void
+     */
+    public function testUpdateSetCallable()
+    {
+        $query = new Query($this->connection);
+        $date = new \DateTime;
+        $query->update('comments')
+            ->set(function ($exp) use ($date) {
+                return $exp
+                    ->eq('comment', 'mark')
+                    ->eq('created', $date, 'date');
+            })
+            ->where(['id' => 1]);
+        $result = $query->sql();
+
+        $this->assertQuotedQuery(
+            'UPDATE <comments> SET <comment> = :c0 , <created> = :c1',
+            $result,
+            !$this->autoQuote
+        );
+
+        $this->assertQuotedQuery(' WHERE <id> = :c2$', $result, !$this->autoQuote);
+        $result = $query->execute();
+        $this->assertCount(1, $result);
+    }
+
+    /**
      * You cannot call values() before insert() it causes all sorts of pain.
      *
      * @expectedException \Cake\Database\Exception
@@ -2776,25 +2825,24 @@ class QueryTest extends TestCase
         $query = new Query($this->connection);
         $result = $query->select(
             function ($q) {
-                    return ['total' => $q->func()->count('*')];
+                return ['total' => $q->func()->count('*')];
             }
         )
-            ->from('articles')
+            ->from('comments')
             ->execute();
-        $expected = [['total' => 3]];
+        $expected = [['total' => 6]];
         $this->assertEquals($expected, $result->fetchAll('assoc'));
 
         $query = new Query($this->connection);
         $result = $query->select([
-                'c' => $query->func()->concat(['title' => 'literal', ' is appended'])
+                'c' => $query->func()->concat(['comment' => 'literal', ' is appended'])
             ])
-            ->from('articles')
+            ->from('comments')
             ->order(['c' => 'ASC'])
+            ->limit(1)
             ->execute();
         $expected = [
-            ['c' => 'First Article is appended'],
-            ['c' => 'Second Article is appended'],
-            ['c' => 'Third Article is appended']
+            ['c' => 'First Comment for First Article is appended'],
         ];
         $this->assertEquals($expected, $result->fetchAll('assoc'));
 
@@ -3435,6 +3483,58 @@ class QueryTest extends TestCase
         $list = $result->fetchAll('assoc');
         $this->assertCount(3, $list);
         $result->closeCursor();
+    }
+
+    /**
+     * Test that cloning goes deep.
+     *
+     * @return void
+     */
+    public function testDeepClone()
+    {
+        $query = new Query($this->connection);
+        $query->select(['id', 'title' => $query->func()->concat(['title' => 'literal', 'test'])])
+            ->from('articles')
+            ->where(['Articles.id' => 1])
+            ->offset(10)
+            ->limit(1)
+            ->order(['Articles.id' => 'DESC']);
+        $dupe = clone $query;
+
+        $this->assertEquals($query->clause('where'), $dupe->clause('where'));
+        $this->assertNotSame($query->clause('where'), $dupe->clause('where'));
+        $dupe->where(['Articles.title' => 'thinger']);
+        $this->assertNotEquals($query->clause('where'), $dupe->clause('where'));
+
+        $this->assertNotSame(
+            $query->clause('select')['title'],
+            $dupe->clause('select')['title']
+        );
+        $this->assertEquals($query->clause('order'), $dupe->clause('order'));
+        $this->assertNotSame($query->clause('order'), $dupe->clause('order'));
+
+        $query->order(['Articles.title' => 'ASC']);
+        $this->assertNotEquals($query->clause('order'), $dupe->clause('order'));
+    }
+
+    /**
+     * Test removeJoin().
+     *
+     * @return void
+     */
+    public function testRemoveJoin()
+    {
+        $query = new Query($this->connection);
+        $query->select(['id', 'title'])
+            ->from('articles')
+            ->join(['authors' => [
+                'type' => 'INNER',
+                'conditions' => ['articles.author_id = authors.id']
+            ]]);
+        $this->assertArrayHasKey('authors', $query->join());
+
+        $this->assertSame($query, $query->removeJoin('authors'));
+        $this->assertArrayNotHasKey('authors', $query->join());
     }
 
     /**

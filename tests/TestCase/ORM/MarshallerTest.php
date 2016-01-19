@@ -98,12 +98,12 @@ class MarshallerTest extends TestCase
 {
 
     public $fixtures = [
-        'core.tags',
-        'core.articles_tags',
         'core.articles',
-        'core.users',
+        'core.articles_tags',
         'core.comments',
-        'core.special_tags'
+        'core.special_tags',
+        'core.tags',
+        'core.users'
     ];
 
     /**
@@ -264,7 +264,7 @@ class MarshallerTest extends TestCase
         $result = $marshall->one($data, []);
 
         $this->assertSame($data['title'], $result->title);
-        $this->assertSame($data['author_id'], $result->author_id, 'No cast on bad data.');
+        $this->assertNull($result->author_id, 'No cast on bad data.');
         $this->assertSame($data['created'], $result->created, 'No cast on bad data.');
     }
 
@@ -1086,6 +1086,14 @@ class MarshallerTest extends TestCase
         $data = [
             'title' => 'Haz tags',
             'body' => 'Some content here',
+            'tags' => ['_ids' => []]
+        ];
+        $result = $marshall->one($data, ['associated' => ['Tags']]);
+        $this->assertCount(0, $result->tags);
+
+        $data = [
+            'title' => 'Haz tags',
+            'body' => 'Some content here',
             'tags' => ['_ids' => [1, 2, 3]]
         ];
         $marshall = new Marshaller($this->articles);
@@ -1719,6 +1727,46 @@ class MarshallerTest extends TestCase
         $this->assertTrue($result->tags[0]->_joinData->dirty('author_id'), 'Field not modified');
         $this->assertTrue($result->tags[0]->_joinData->dirty('highlighted'), 'Field not modified');
         $this->assertSame(99, $result->tags[0]->_joinData->author_id);
+        $this->assertTrue($result->tags[0]->_joinData->highlighted);
+    }
+
+    /**
+     * Test that _joinData is marshalled consistently with both
+     * new and existing records
+     *
+     * @return void
+     */
+    public function testMergeBelongsToManyHandleJoinDataConsistently()
+    {
+        TableRegistry::clear();
+        $articles = TableRegistry::get('Articles');
+        $articles->belongsToMany('Tags', [
+            'through' => 'SpecialTags'
+        ]);
+
+        $entity = $articles->get(1);
+        $data = [
+            'title' => 'Haz data',
+            'tags' => [
+                ['id' => 3, 'tag' => 'Cake', '_joinData' => ['highlighted' => true]],
+            ]
+        ];
+        $marshall = new Marshaller($articles);
+        $result = $marshall->merge($entity, $data, ['associated' => 'Tags']);
+        $this->assertInstanceOf('Cake\ORM\Entity', $result->tags[0]->_joinData);
+        $this->assertTrue($result->tags[0]->_joinData->highlighted);
+
+        // Also ensure merge() overwrites existing data.
+        $entity = $articles->get(1, ['contain' => 'Tags']);
+        $data = [
+            'title' => 'Haz data',
+            'tags' => [
+                ['id' => 3, 'tag' => 'Cake', '_joinData' => ['highlighted' => true]],
+            ]
+        ];
+        $marshall = new Marshaller($articles);
+        $result = $marshall->merge($entity, $data, ['associated' => 'Tags']);
+        $this->assertInstanceOf('Cake\ORM\Entity', $result->tags[0]->_joinData);
         $this->assertTrue($result->tags[0]->_joinData->highlighted);
     }
 

@@ -18,6 +18,7 @@ use Cake\Database\Expression\IdentifierExpression;
 use Cake\Database\Expression\OrderByExpression;
 use Cake\Database\Expression\QueryExpression;
 use Cake\Database\TypeMap;
+use Cake\Database\ValueBinder;
 use Cake\Datasource\ConnectionManager;
 use Cake\ORM\Query;
 use Cake\ORM\ResultSet;
@@ -36,8 +37,14 @@ class QueryTest extends TestCase
      *
      * @var array
      */
-    public $fixtures = ['core.articles', 'core.authors', 'core.tags',
-        'core.articles_tags', 'core.posts'];
+    public $fixtures = [
+        'core.articles',
+        'core.articles_tags',
+        'core.authors',
+        'core.comments',
+        'core.posts',
+        'core.tags'
+    ];
 
     /**
      * setUp method
@@ -813,6 +820,21 @@ class QueryTest extends TestCase
      */
     public function testApplyOptions()
     {
+        $this->table->belongsTo('articles');
+        $typeMap = new TypeMap([
+            'foo.id' => 'integer',
+            'id' => 'integer',
+            'articles.id' => 'integer',
+            'articles.author_id' => 'integer',
+            'author_id' => 'integer',
+            'articles.title' => 'string',
+            'title' => 'string',
+            'articles.body' => 'text',
+            'body' => 'text',
+            'articles.published' => 'string',
+            'published' => 'string',
+        ]);
+
         $options = [
             'fields' => ['field_a', 'field_b'],
             'conditions' => ['field_a' => 1, 'field_b' => 'something'],
@@ -821,7 +843,7 @@ class QueryTest extends TestCase
             'offset' => 5,
             'group' => ['field_a'],
             'having' => ['field_a >' => 100],
-            'contain' => ['table_a' => ['table_b']],
+            'contain' => ['articles'],
             'join' => ['table_a' => ['conditions' => ['a > b']]]
         ];
         $query = new Query($this->connection, $this->table);
@@ -829,13 +851,13 @@ class QueryTest extends TestCase
 
         $this->assertEquals(['field_a', 'field_b'], $query->clause('select'));
 
-        $expected = new QueryExpression($options['conditions'], $this->fooTypeMap);
+        $expected = new QueryExpression($options['conditions'], $typeMap);
         $result = $query->clause('where');
         $this->assertEquals($expected, $result);
 
         $this->assertEquals(1, $query->clause('limit'));
 
-        $expected = new QueryExpression(['a > b'], $this->fooTypeMap);
+        $expected = new QueryExpression(['a > b'], $typeMap);
         $result = $query->clause('join');
         $this->assertEquals([
             'table_a' => ['alias' => 'table_a', 'type' => 'INNER', 'conditions' => $expected]
@@ -847,11 +869,10 @@ class QueryTest extends TestCase
         $this->assertEquals(5, $query->clause('offset'));
         $this->assertEquals(['field_a'], $query->clause('group'));
 
-        $expected = new QueryExpression($options['having']);
-        $expected->typeMap($this->fooTypeMap);
+        $expected = new QueryExpression($options['having'], $typeMap);
         $this->assertEquals($expected, $query->clause('having'));
 
-        $expected = ['table_a' => ['table_b' => []]];
+        $expected = ['articles' => []];
         $this->assertEquals($expected, $query->contain());
     }
 
@@ -1532,6 +1553,28 @@ class QueryTest extends TestCase
     }
 
     /**
+     * Tests that beforeFind is only ever called once, even if you trigger it again in the beforeFind
+     *
+     * @return void
+     */
+    public function testBeforeFindCalledOnce()
+    {
+        $callCount = 0;
+        $table = TableRegistry::get('Articles');
+        $table->eventManager()
+            ->attach(function ($event, $query) use (&$callCount) {
+                $valueBinder = new ValueBinder();
+                $query->sql($valueBinder);
+                $callCount++;
+            }, 'Model.beforeFind');
+
+        $query = $table->find();
+        $valueBinder = new ValueBinder();
+        $query->sql($valueBinder);
+        $this->assertSame(1, $callCount);
+    }
+
+    /**
      * Test that count() returns correct results with group by.
      *
      * @return void
@@ -2039,6 +2082,64 @@ class QueryTest extends TestCase
         $results = $query->all();
         $this->assertCount(2, $results);
         $this->assertEquals(3, $query->count());
+    }
+
+    /**
+     * Verify that only one count query is issued
+     * A subsequent request for the count will take the previously
+     * returned value
+     *
+     * @return void
+     */
+    public function testCountCache()
+    {
+        $query = $this->getMockBuilder('Cake\ORM\Query')
+            ->disableOriginalConstructor()
+            ->setMethods(['_performCount'])
+            ->getMock();
+
+        $query->expects($this->once())
+            ->method('_performCount')
+            ->will($this->returnValue(1));
+
+        $result = $query->count();
+        $this->assertSame(1, $result, 'The result of the sql query should be returned');
+
+        $resultAgain = $query->count();
+        $this->assertSame(1, $resultAgain, 'No query should be issued and the cached value returned');
+    }
+
+    /**
+     * If the query is dirty the cached value should be ignored
+     * and a new count query issued
+     *
+     * @return void
+     */
+    public function testCountCacheDirty()
+    {
+        $query = $this->getMockBuilder('Cake\ORM\Query')
+            ->disableOriginalConstructor()
+            ->setMethods(['_performCount'])
+            ->getMock();
+
+        $query->expects($this->at(0))
+            ->method('_performCount')
+            ->will($this->returnValue(1));
+
+        $query->expects($this->at(1))
+            ->method('_performCount')
+            ->will($this->returnValue(2));
+
+        $result = $query->count();
+        $this->assertSame(1, $result, 'The result of the sql query should be returned');
+
+        $query->where(['dirty' => 'cache']);
+
+        $secondResult = $query->count();
+        $this->assertSame(2, $secondResult, 'The query cache should be droppped with any modification');
+
+        $thirdResult = $query->count();
+        $this->assertSame(2, $thirdResult, 'The query has not been modified, the cached value is valid');
     }
 
     /**

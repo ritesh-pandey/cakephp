@@ -132,7 +132,7 @@ class RouteBuilder
      * Get or set default route class.
      *
      * @param string|null $routeClass Class name.
-     * @return string|void
+     * @return string|null
      */
     public function routeClass($routeClass = null)
     {
@@ -149,7 +149,7 @@ class RouteBuilder
      * extensions applied. However, setting extensions does not modify existing routes.
      *
      * @param null|string|array $extensions Either the extensions to use or null.
-     * @return array|void
+     * @return array|null
      */
     public function extensions($extensions = null)
     {
@@ -157,6 +157,18 @@ class RouteBuilder
             return $this->_extensions;
         }
         $this->_extensions = (array)$extensions;
+    }
+
+    /**
+     * Add additional extensions to what is already in current scope
+     *
+     * @param string|array $extensions One or more extensions to add
+     * @return void
+     */
+    public function addExtensions($extensions)
+    {
+        $extensions = array_merge($this->_extensions, (array)$extensions);
+        $this->_extensions = array_unique($extensions);
     }
 
     /**
@@ -332,7 +344,7 @@ class RouteBuilder
         }
 
         if (is_callable($callback)) {
-            $idName = Inflector::singularize($urlName) . '_id';
+            $idName = Inflector::singularize(str_replace('-', '_', $urlName)) . '_id';
             $path = '/' . $urlName . '/:' . $idName;
             $this->scope($path, [], $callback);
         }
@@ -503,7 +515,7 @@ class RouteBuilder
      * redirect destination allows you to use other routes to define where an URL string should be redirected to.
      *
      * ```
-     * $routes-redirect('/posts/*', 'http://google.com', ['status' => 302]);
+     * $routes->redirect('/posts/*', 'http://google.com', ['status' => 302]);
      * ```
      *
      * Redirects /posts/* to http://google.com with a HTTP status of 302

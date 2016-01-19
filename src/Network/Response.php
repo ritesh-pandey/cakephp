@@ -797,7 +797,7 @@ class Response
      * e.g `mapType('application/pdf'); // returns 'pdf'`
      *
      * @param string|array $ctype Either a string content type to map, or an array of types.
-     * @return mixed Aliases for the types provided.
+     * @return string|array|null Aliases for the types provided.
      */
     public function mapType($ctype)
     {
@@ -1390,9 +1390,9 @@ class Response
 
             $original = $preg = $domain;
             if (strpos($domain, '://') === false) {
-                $preg = ($requestIsSSL ? 'https://' : 'http://') . $domain;
+                $domain = ($requestIsSSL ? 'https://' : 'http://') . $domain;
             }
-            $preg = '@' . str_replace('*', '.*', $domain) . '@';
+            $preg = '@^' . str_replace('\*', '.*', preg_quote($domain, '@')) . '$@';
             $result[] = compact('original', 'preg');
         }
         return $result;
@@ -1422,7 +1422,7 @@ class Response
             'download' => null
         ];
 
-        if (strpos(dirname($path), '..') !== false) {
+        if (strpos($path, '../') !== false || strpos($path, '..\\') !== false) {
             throw new NotFoundException('The requested file contains `..` and will not be read.');
         }
 

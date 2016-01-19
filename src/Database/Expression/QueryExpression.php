@@ -100,7 +100,7 @@ class QueryExpression implements ExpressionInterface, Countable
      * then it will cause the placeholder to be re-written dynamically so if the
      * value is an array, it will create as many placeholders as values are in it.
      *
-     * @param string|array|QueryExpression $conditions single or multiple conditions to
+     * @param string|array|\Cake\Database\ExpressionInterface $conditions single or multiple conditions to
      * be added. When using an array and the key is 'OR' or 'AND' a new expression
      * object will be created with that conjunction and internal array value passed
      * as conditions.
@@ -512,6 +512,22 @@ class QueryExpression implements ExpressionInterface, Countable
     }
 
     /**
+     * Returns true if this expression contains any other nested
+     * ExpressionInterface objects
+     *
+     * @return bool
+     */
+    public function hasNestedExpression()
+    {
+        foreach ($this->_conditions as $c) {
+            if ($c instanceof ExpressionInterface) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Auxiliary function used for decomposing a nested array of conditions and build
      * a tree structure inside this object to represent the full SQL expression.
      * String conditions are stored directly in the conditions, while any other
@@ -635,21 +651,16 @@ class QueryExpression implements ExpressionInterface, Countable
     }
 
     /**
-     * Returns an array of placeholders that will have a bound value corresponding
-     * to each value in the first argument.
+     * Clone this object and its subtree of expressions.
      *
-     * @param string $field Database field to be used to bind values
-     * @param array $values The values to bind
-     * @param string $type the type to be used to bind the values
-     * @return array
+     * @return void
      */
-    protected function _bindMultiplePlaceholders($field, $values, $type)
+    public function __clone()
     {
-        $type = str_replace('[]', '', $type);
-        $params = [];
-        foreach ($values as $value) {
-            $params[] = $this->_bindValue($field, $value, $type);
+        foreach ($this->_conditions as $i => $condition) {
+            if ($condition instanceof ExpressionInterface) {
+                $this->_conditions[$i] = clone $condition;
+            }
         }
-        return implode(', ', $params);
     }
 }

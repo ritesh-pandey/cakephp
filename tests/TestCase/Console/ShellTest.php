@@ -128,13 +128,13 @@ class ShellTest extends TestCase
      * @var array
      */
     public $fixtures = [
-        'core.posts',
-        'core.comments',
         'core.articles',
-        'core.users',
-        'core.tags',
         'core.articles_tags',
-        'core.attachments'
+        'core.attachments',
+        'core.comments',
+        'core.posts',
+        'core.tags',
+        'core.users'
     ];
 
     /**
@@ -652,6 +652,7 @@ class ShellTest extends TestCase
             ->will($this->returnValue(true));
         $result = $shell->runCommand(['cakes', '--verbose']);
         $this->assertTrue($result);
+        $this->assertEquals('main', $shell->command);
     }
 
     /**
@@ -670,6 +671,7 @@ class ShellTest extends TestCase
             ->will($this->returnValue(true));
         $result = $shell->runCommand(['hit_me', 'cakes', '--verbose'], true);
         $this->assertTrue($result);
+        $this->assertEquals('hit_me', $shell->command);
     }
 
     /**

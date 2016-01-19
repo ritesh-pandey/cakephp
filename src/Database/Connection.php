@@ -528,6 +528,17 @@ class Connection implements ConnectionInterface
     }
 
     /**
+     * Returns whether the driver supports adding or dropping constraints
+     * to already created tables.
+     *
+     * @return bool true if driver supports dynamic constraints
+     */
+    public function supportsDynamicConstraints()
+    {
+        return $this->_driver->supportsDynamicConstraints();
+    }
+
+    /**
      * {@inheritDoc}
      *
      * ### Example:
@@ -599,7 +610,7 @@ class Connection implements ConnectionInterface
      *
      * @param mixed $value The value to quote.
      * @param string $type Type to be used for determining kind of quoting to perform
-     * @return mixed quoted value
+     * @return string Quoted value
      */
     public function quote($value, $type = null)
     {
@@ -709,9 +720,7 @@ class Connection implements ConnectionInterface
             'username' => '*****',
             'host' => '*****',
             'database' => '*****',
-            'port' => '*****',
-            'prefix' => '*****',
-            'schema' => '*****'
+            'port' => '*****'
         ];
         $replace = array_intersect_key($secrets, $this->_config);
         $config = $replace + $this->_config;

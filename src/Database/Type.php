@@ -34,12 +34,15 @@ class Type
     protected static $_types = [
         'biginteger' => 'Cake\Database\Type\IntegerType',
         'binary' => 'Cake\Database\Type\BinaryType',
+        'boolean' => 'Cake\Database\Type\BoolType',
         'date' => 'Cake\Database\Type\DateType',
-        'float' => 'Cake\Database\Type\FloatType',
-        'decimal' => 'Cake\Database\Type\FloatType',
-        'integer' => 'Cake\Database\Type\IntegerType',
-        'time' => 'Cake\Database\Type\TimeType',
         'datetime' => 'Cake\Database\Type\DateTimeType',
+        'decimal' => 'Cake\Database\Type\FloatType',
+        'float' => 'Cake\Database\Type\FloatType',
+        'integer' => 'Cake\Database\Type\IntegerType',
+        'string' => 'Cake\Database\Type\StringType',
+        'text' => 'Cake\Database\Type\StringType',
+        'time' => 'Cake\Database\Type\TimeType',
         'timestamp' => 'Cake\Database\Type\DateTimeType',
         'uuid' => 'Cake\Database\Type\UuidType',
     ];
@@ -49,6 +52,7 @@ class Type
      * for doing conversion on these
      *
      * @var array
+     * @deprecated 3.1 All types will now use a specific class
      */
     protected static $_basicTypes = [
         'string' => ['callback' => ['\Cake\Database\Type', 'strval']],
@@ -95,13 +99,14 @@ class Type
         if (isset(static::$_builtTypes[$name])) {
             return static::$_builtTypes[$name];
         }
-        if (isset(static::$_basicTypes[$name])) {
-            return static::$_builtTypes[$name] = new static($name);
-        }
         if (!isset(static::$_types[$name])) {
             throw new InvalidArgumentException(sprintf('Unknown type "%s"', $name));
         }
-        return static::$_builtTypes[$name] = new static::$_types[$name]($name);
+        if (is_string(static::$_types[$name])) {
+            return static::$_builtTypes[$name] = new static::$_types[$name]($name);
+        }
+        
+        return static::$_builtTypes[$name] = static::$_types[$name];
     }
 
     /**
@@ -121,7 +126,7 @@ class Type
      * If called with no arguments it will return current types map array
      * If $className is omitted it will return mapped class for $type
      *
-     * @param string|array|null $type if string name of type to map, if array list of arrays to be mapped
+     * @param string|array|\Cake\Database\Type|null $type if string name of type to map, if array list of arrays to be mapped
      * @param string|null $className The classname to register.
      * @return array|string|null if $type is null then array with current map, if $className is null string
      * configured class name for give $type, null otherwise
@@ -131,9 +136,9 @@ class Type
         if ($type === null) {
             return self::$_types;
         }
-        if (!is_string($type)) {
+        if (is_array($type)) {
             self::$_types = $type;
-            return;
+            return null;
         }
         if ($className === null) {
             return isset(self::$_types[$type]) ? self::$_types[$type] : null;
@@ -205,6 +210,7 @@ class Type
      *
      * @param mixed $value value to be converted to PHP equivalent
      * @return mixed
+     * @deprecated 3.1 All types should now be a specific class
      */
     protected function _basicTypeCast($value)
     {
@@ -233,11 +239,6 @@ class Type
             return PDO::PARAM_NULL;
         }
 
-        if (!empty(self::$_basicTypes[$this->_name])) {
-            $typeInfo = self::$_basicTypes[$this->_name];
-            return isset($typeInfo['pdo']) ? $typeInfo['pdo'] : PDO::PARAM_STR;
-        }
-
         return PDO::PARAM_STR;
     }
 
@@ -248,6 +249,7 @@ class Type
      *
      * @param mixed $value The value to convert to a boolean.
      * @return bool
+     * @deprecated 3.1.8 This method is now unused.
      */
     public static function boolval($value)
     {
@@ -264,6 +266,7 @@ class Type
      *
      * @param mixed $value The value to convert to a string.
      * @return bool
+     * @deprecated 3.1.8 This method is now unused.
      */
     public static function strval($value)
     {

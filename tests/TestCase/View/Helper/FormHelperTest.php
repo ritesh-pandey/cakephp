@@ -583,6 +583,58 @@ class FormHelperTest extends TestCase
     }
 
     /**
+     * Test ensuring template variables work in template files loaded
+     * during input().
+     *
+     * @return void
+     */
+    public function testInputTemplatesFromFile()
+    {
+        $result = $this->Form->input('title', [
+            'templates' => 'test_templates',
+            'templateVars' => [
+                'forcontainer' => 'container-data'
+            ]
+        ]);
+        $expected = [
+            'div' => ['class'],
+            'label' => ['for'],
+            'Title',
+            '/label',
+            'input' => ['name', 'type' => 'text', 'id'],
+            'container-data',
+            '/div',
+        ];
+        $this->assertHtml($expected, $result);
+    }
+
+    /**
+     * Test using template vars in inputSubmit and submitContainer template.
+     *
+     * @return void
+     */
+    public function testSubmitTemplateVars()
+    {
+        $this->Form->templates([
+            'inputSubmit' => '<input custom="{{forinput}}" type="{{type}}"{{attrs}}/>',
+            'submitContainer' => '<div class="submit">{{content}}{{forcontainer}}</div>'
+        ]);
+        $result = $this->Form->submit('Submit', [
+            'templateVars' => [
+                'forinput' => 'in-input',
+                'forcontainer' => 'in-container'
+            ]
+        ]);
+        $expected = [
+            'div' => ['class'],
+            'input' => ['custom' => 'in-input', 'type' => 'submit', 'value' => 'Submit'],
+            'in-container',
+            '/div',
+        ];
+        $this->assertHtml($expected, $result);
+    }
+
+    /**
      * test the create() method
      *
      * @dataProvider requestTypeProvider
@@ -2513,6 +2565,29 @@ class FormHelperTest extends TestCase
     }
 
     /**
+     * Test that nested inputs end with brackets
+     *
+     * @return void
+     */
+    public function testNestedInputsEndWithBrackets()
+    {
+        $result = $this->Form->text('nested.text[]');
+        $expected = [
+            'input' => [
+                'type' => 'text', 'name' => 'nested[text][]'
+            ],
+        ];
+
+        $result = $this->Form->file('nested.file[]');
+        $expected = [
+            'input' => [
+                'type' => 'file', 'name' => 'nested[file][]'
+            ],
+        ];
+        $this->assertHtml($expected, $result);
+    }
+
+    /**
      * Test id prefix
      *
      * @return void
@@ -3716,11 +3791,11 @@ class FormHelperTest extends TestCase
         ]);
         $expected = [
             'div' => ['class' => 'error-message'],
-                'ul' => [],
-                    '<li', 'Cannot be empty', '/li',
-                    '<li', 'No good!', '/li',
-                    '<li', 'Something else', '/li',
-                '/ul',
+            'ul' => [],
+            '<li', 'Cannot be empty', '/li',
+            '<li', 'No good!', '/li',
+            '<li', 'Something else', '/li',
+            '/ul',
             '/div'
         ];
         $this->assertHtml($expected, $result);
@@ -6173,11 +6248,11 @@ class FormHelperTest extends TestCase
         $result = $this->Form->input('other', ['type' => 'textarea']);
         $expected = [
             'div' => ['class' => 'input textarea'],
-                'label' => ['for' => 'other'],
-                    'Other',
-                '/label',
-                'textarea' => ['name' => 'other', 'id' => 'other', 'rows' => 5],
-                '/textarea',
+            'label' => ['for' => 'other'],
+            'Other',
+            '/label',
+            'textarea' => ['name' => 'other', 'id' => 'other', 'rows' => 5],
+            '/textarea',
             '/div'
         ];
         $this->assertHtml($expected, $result);
@@ -6185,11 +6260,11 @@ class FormHelperTest extends TestCase
         $result = $this->Form->input('stuff', ['type' => 'textarea']);
         $expected = [
             'div' => ['class' => 'input textarea'],
-                'label' => ['for' => 'stuff'],
-                    'Stuff',
-                '/label',
-                'textarea' => ['name' => 'stuff', 'maxlength' => 10, 'id' => 'stuff', 'rows' => 5],
-                '/textarea',
+            'label' => ['for' => 'stuff'],
+            'Stuff',
+            '/label',
+            'textarea' => ['name' => 'stuff', 'maxlength' => 10, 'id' => 'stuff', 'rows' => 5],
+            '/textarea',
             '/div'
         ];
         $this->assertHtml($expected, $result);
@@ -6417,6 +6492,32 @@ class FormHelperTest extends TestCase
         ];
         $this->assertHtml($expected, $result);
 
+        $result = $this->Form->postLink(
+            'Delete',
+            '/posts/delete/1',
+            ['target' => '_blank', 'class' => 'btn btn-danger']
+        );
+        $expected = [
+            'form' => [
+                'method' => 'post', 'target' => '_blank', 'action' => '/posts/delete/1',
+                'name' => 'preg:/post_\w+/', 'style' => 'display:none;'
+            ],
+            'input' => ['type' => 'hidden', 'name' => '_method', 'value' => 'POST'],
+            '/form',
+            'a' => ['class' => 'btn btn-danger', 'href' => '#', 'onclick' => 'preg:/document\.post_\w+\.submit\(\); event\.returnValue = false; return false;/'],
+            'Delete',
+            '/a'
+        ];
+        $this->assertHtml($expected, $result);
+    }
+
+    /**
+     * Test the confirm option for postLink()
+     *
+     * @return void
+     */
+    public function testPostLinkWithConfirm()
+    {
         $result = $this->Form->postLink('Delete', '/posts/delete/1', ['confirm' => 'Confirm?']);
         $expected = [
             'form' => [
@@ -6434,7 +6535,7 @@ class FormHelperTest extends TestCase
         $result = $this->Form->postLink(
             'Delete',
             '/posts/delete/1',
-            ['escape' => false, 'confirm' => '\'Confirm\' this "deletion"?']
+            ['escape' => false, 'confirm' => "'Confirm'\nthis \"deletion\"?"]
         );
         $expected = [
             'form' => [
@@ -6443,39 +6544,8 @@ class FormHelperTest extends TestCase
             ],
             'input' => ['type' => 'hidden', 'name' => '_method', 'value' => 'POST'],
             '/form',
-            'a' => ['href' => '#', 'onclick' => 'preg:/if \(confirm\(&quot;&#039;Confirm&#039; this \\\\&quot;deletion\\\\&quot;\?&quot;\)\) \{ document\.post_\w+\.submit\(\); \} event\.returnValue = false; return false;/'],
+            'a' => ['href' => '#', 'onclick' => "preg:/if \(confirm\(&quot;&#039;Confirm&#039;\\nthis \\\\&quot;deletion\\\\&quot;\?&quot;\)\) \{ document\.post_\w+\.submit\(\); \} event\.returnValue = false; return false;/"],
             'Delete',
-            '/a'
-        ];
-        $this->assertHtml($expected, $result);
-
-        $result = $this->Form->postLink('Delete', '/posts/delete/1', ['target' => '_blank']);
-        $expected = [
-            'form' => [
-                'method' => 'post', 'target' => '_blank', 'action' => '/posts/delete/1',
-                'name' => 'preg:/post_\w+/', 'style' => 'display:none;'
-            ],
-            'input' => ['type' => 'hidden', 'name' => '_method', 'value' => 'POST'],
-            '/form',
-            'a' => ['href' => '#', 'onclick' => 'preg:/document\.post_\w+\.submit\(\); event\.returnValue = false; return false;/'],
-            'Delete',
-            '/a'
-        ];
-        $this->assertHtml($expected, $result);
-
-        $result = $this->Form->postLink(
-            '',
-            ['controller' => 'items', 'action' => 'delete', 10],
-            ['class' => 'btn btn-danger', 'escape' => false, 'confirm' => 'Confirm thing']
-        );
-        $expected = [
-            'form' => [
-                'method' => 'post', 'action' => '/items/delete/10',
-                'name' => 'preg:/post_\w+/', 'style' => 'display:none;'
-            ],
-            'input' => ['type' => 'hidden', 'name' => '_method', 'value' => 'POST'],
-            '/form',
-            'a' => ['class' => 'btn btn-danger', 'href' => '#', 'onclick' => 'preg:/if \(confirm\(\&quot\;Confirm thing\&quot\;\)\) \{ document\.post_\w+\.submit\(\); \} event\.returnValue = false; return false;/'],
             '/a'
         ];
         $this->assertHtml($expected, $result);

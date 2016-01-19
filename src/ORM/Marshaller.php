@@ -223,7 +223,7 @@ class Marshaller
     protected function _marshalAssociation($assoc, $value, $options)
     {
         if (!is_array($value)) {
-            return;
+            return null;
         }
         $targetTable = $assoc->target();
         $marshaller = $targetTable->marshaller();
@@ -368,6 +368,10 @@ class Marshaller
      */
     protected function _loadAssociatedByIds($assoc, $ids)
     {
+        if (empty($ids)) {
+            return [];
+        }
+
         $target = $assoc->target();
         $primaryKey = (array)$target->primaryKey();
         $multi = count($primaryKey) > 1;
@@ -653,7 +657,7 @@ class Marshaller
             return [];
         }
 
-        if (!in_array('_joinData', $associated) && !isset($associated['_joinData'])) {
+        if (!empty($associated) && !in_array('_joinData', $associated) && !isset($associated['_joinData'])) {
             return $this->mergeMany($original, $value, $options);
         }
 

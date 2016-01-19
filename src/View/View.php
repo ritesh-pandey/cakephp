@@ -40,21 +40,30 @@ use RuntimeException;
  * layout using `$this->set()`
  *
  * View class supports using plugins as themes. You can set
- * `$this->theme = 'SuperHot'` in your Controller to use plugin `SuperHot` as a
- * theme. Eg. If current action is Posts::index() then View class will look for
- * template file `plugins/SuperHot/Template/Posts/index.ctp`. If a theme template
+ *
+ * ```
+ * public function beforeRender(\Cake\Event\Event $event)
+ * {
+ *      $this->viewBuilder()->theme('SuperHot');
+ * }
+ * ```
+ *
+ * in your Controller to use plugin `SuperHot` as a theme. Eg. If current action
+ * is PostsController::index() then View class will look for template file
+ * `plugins/SuperHot/Template/Posts/index.ctp`. If a theme template
  * is not found for the current action the default app template file is used.
  *
- * @property      \Cake\View\Helper\FormHelper $Form
- * @property      \Cake\View\Helper\HtmlHelper $Html
- * @property      \Cake\View\Helper\NumberHelper $Number
- * @property      \Cake\View\Helper\PaginatorHelper $Paginator
- * @property      \Cake\View\Helper\RssHelper $Rss
- * @property      \Cake\View\Helper\SessionHelper $Session
- * @property      \Cake\View\Helper\TextHelper $Text
- * @property      \Cake\View\Helper\TimeHelper $Time
- * @property      \Cake\View\Helper\UrlHelper $Url
- * @property      \Cake\View\ViewBlock $Blocks
+ * @property \Cake\View\Helper\FlashHelper $Flash
+ * @property \Cake\View\Helper\FormHelper $Form
+ * @property \Cake\View\Helper\HtmlHelper $Html
+ * @property \Cake\View\Helper\NumberHelper $Number
+ * @property \Cake\View\Helper\PaginatorHelper $Paginator
+ * @property \Cake\View\Helper\RssHelper $Rss
+ * @property \Cake\View\Helper\SessionHelper $Session
+ * @property \Cake\View\Helper\TextHelper $Text
+ * @property \Cake\View\Helper\TimeHelper $Time
+ * @property \Cake\View\Helper\UrlHelper $Url
+ * @property \Cake\View\ViewBlock $Blocks
  */
 class View implements EventDispatcherInterface
 {
@@ -104,7 +113,7 @@ class View implements EventDispatcherInterface
     /**
      * An array of names of built-in helpers to include.
      *
-     * @var mixed
+     * @var array
      */
     public $helpers = [];
 
@@ -354,7 +363,7 @@ class View implements EventDispatcherInterface
      * Get/set path for templates files.
      *
      * @param string $path Path for template files. If null returns current path.
-     * @return string|void
+     * @return string|null
      */
     public function templatePath($path = null)
     {
@@ -369,7 +378,7 @@ class View implements EventDispatcherInterface
      * Get/set path for layout files.
      *
      * @param string $path Path for layout files. If null returns current path.
-     * @return string|void
+     * @return string|null
      */
     public function layoutPath($path = null)
     {
@@ -386,7 +395,7 @@ class View implements EventDispatcherInterface
      * automatically applied to rendered templates.
      *
      * @param bool $autoLayout Boolean to turn on/off. If null returns current value.
-     * @return bool|void
+     * @return bool|null
      */
     public function autoLayout($autoLayout = null)
     {
@@ -401,7 +410,7 @@ class View implements EventDispatcherInterface
      * The view theme to use.
      *
      * @param string $theme Theme name. If null returns current theme.
-     * @return string|void
+     * @return string|null
      */
     public function theme($theme = null)
     {
@@ -417,7 +426,7 @@ class View implements EventDispatcherInterface
      * filename in /app/Template/<SubFolder> without the .ctp extension.
      *
      * @param string $name Template file name to set. If null returns current name.
-     * @return string|void
+     * @return string|null
      */
     public function template($name = null)
     {
@@ -434,7 +443,7 @@ class View implements EventDispatcherInterface
      * without the .ctp extension.
      *
      * @param string $name Layout file name to set. If null returns current name.
-     * @return string|void
+     * @return string|null
      */
     public function layout($name = null)
     {
@@ -556,7 +565,7 @@ class View implements EventDispatcherInterface
      *
      * @param string|null $view Name of view file to use
      * @param string|null $layout Layout to use.
-     * @return string|void Rendered content or null if content already rendered and returned earlier.
+     * @return string|null Rendered content or null if content already rendered and returned earlier.
      * @throws \Cake\Core\Exception\Exception If there is an error in the view.
      * @triggers View.beforeRender $this, [$viewFileName]
      * @triggers View.afterRender $this, [$viewFileName]
@@ -564,7 +573,7 @@ class View implements EventDispatcherInterface
     public function render($view = null, $layout = null)
     {
         if ($this->hasRendered) {
-            return;
+            return null;
         }
 
         if ($layout !== null) {
@@ -734,6 +743,19 @@ class View implements EventDispatcherInterface
     public function assign($name, $value)
     {
         $this->Blocks->set($name, $value);
+    }
+
+    /**
+     * Reset the content for a block. This will overwrite any
+     * existing content.
+     *
+     * @param string $name Name of the block
+     * @return void
+     * @see ViewBlock::set()
+     */
+    public function reset($name)
+    {
+        $this->assign($name, '');
     }
 
     /**
@@ -1034,9 +1056,6 @@ class View implements EventDispatcherInterface
             $name = $templatePath . $subDir . $this->_inflectViewFileName($name);
         } elseif (strpos($name, DS) !== false) {
             if ($name[0] === DS || $name[1] === ':') {
-                if (is_file($name)) {
-                    return $name;
-                }
                 $name = trim($name, DS);
             } elseif (!$plugin || $this->templatePath !== $this->name) {
                 $name = $templatePath . $subDir . $name;
@@ -1151,7 +1170,7 @@ class View implements EventDispatcherInterface
      * Finds an element filename, returns false on failure.
      *
      * @param string $name The name of the element to find.
-     * @return mixed Either a string to the element filename or false when one can't be found.
+     * @return string|false Either a string to the element filename or false when one can't be found.
      */
     protected function _getElementFileName($name)
     {

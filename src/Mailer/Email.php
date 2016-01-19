@@ -35,7 +35,7 @@ use Serializable;
 use SimpleXmlElement;
 
 /**
- * CakePHP email class.
+ * CakePHP Email class.
  *
  * This class is used for sending Internet Message Format based
  * on the standard outlined in http://www.rfc-editor.org/rfc/rfc2822.txt
@@ -46,7 +46,6 @@ use SimpleXmlElement;
  * Email::config() can be used to add or read a configuration profile for Email instances.
  * Once made configuration profiles can be used to re-use across various email messages your
  * application sends.
- *
  */
 class Email implements JsonSerializable, Serializable
 {
@@ -1202,7 +1201,7 @@ class Email implements JsonSerializable, Serializable
      *   an array of multiple transports to set.
      * @param array|AbstractTransport|null $config Either an array of configuration
      *   data, or a transport instance.
-     * @return mixed Either null when setting or an array of data when reading.
+     * @return array|null Either null when setting or an array of data when reading.
      * @throws \BadMethodCallException When modifying an existing configuration.
      */
     public static function configTransport($key, $config = null)
@@ -1214,7 +1213,7 @@ class Email implements JsonSerializable, Serializable
             foreach ($key as $name => $settings) {
                 static::configTransport($name, $settings);
             }
-            return;
+            return null;
         }
         if (isset(static::$_transportConfig[$key])) {
             throw new BadMethodCallException(sprintf('Cannot modify an existing config "%s"', $key));
@@ -1840,8 +1839,8 @@ class Email implements JsonSerializable, Serializable
 
         foreach ($types as $type) {
             $View->hasRendered = false;
-            $View->templatePath('Email/' . $type);
-            $View->layoutPath('Email/' . $type);
+            $View->templatePath('Email' . DIRECTORY_SEPARATOR . $type);
+            $View->layoutPath('Email' . DIRECTORY_SEPARATOR . $type);
 
             $render = $View->render();
             $render = str_replace(["\r\n", "\r"], "\n", $render);
@@ -1906,7 +1905,7 @@ class Email implements JsonSerializable, Serializable
         $properties = [
             '_to', '_from', '_sender', '_replyTo', '_cc', '_bcc', '_subject',
             '_returnPath', '_readReceipt', '_emailFormat', '_emailPattern', '_domain',
-            '_attachments', '_messageId', '_headers', 'viewVars', 'charset', 'headerCharset'
+            '_attachments', '_messageId', '_headers', '_appCharset', 'viewVars', 'charset', 'headerCharset'
         ];
 
         $array = ['viewConfig' => $this->viewBuilder()->jsonSerialize()];

@@ -16,7 +16,6 @@ namespace Cake\TestSuite\Fixture;
 
 use Cake\Core\Configure;
 use Cake\Core\Exception\Exception;
-use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\Utility\Inflector;
 use PDOException;
@@ -30,7 +29,7 @@ class FixtureManager
 {
 
     /**
-     * Was this class already initialized?
+     * Was this instance already initialized?
      *
      * @var bool
      */
@@ -56,6 +55,32 @@ class FixtureManager
      * @var array
      */
     protected $_insertionMap = [];
+
+    /**
+     * List of TestCase class name that have been processed
+     *
+     * @var array
+     */
+    protected $_processed = [];
+
+    /**
+     * Is the test runner being run with `--debug` enabled.
+     * When true, fixture SQL will also be logged.
+     *
+     * @var bool
+     */
+    protected $_debug = false;
+
+    /**
+     * Modify the debug mode.
+     *
+     * @param bool $debug Whether or not fixture debug mode is enabled.
+     * @return void
+     */
+    public function setDebug($debug)
+    {
+        $this->_debug = $debug;
+    }
 
     /**
      * Inspects the test to look for unloaded fixtures and loads them
@@ -107,13 +132,13 @@ class FixtureManager
                 continue;
             }
             if (strpos($connection, 'test_') === 0) {
-                $map[$connection] = substr($connection, 5);
+                $map[substr($connection, 5)] = $connection;
             } else {
                 $map['test_' . $connection] = $connection;
             }
         }
         foreach ($map as $alias => $connection) {
-            ConnectionManager::alias($alias, $connection);
+            ConnectionManager::alias($connection, $alias);
         }
     }
 
@@ -194,7 +219,7 @@ class FixtureManager
      * Runs the drop and create commands on the fixtures if necessary.
      *
      * @param \Cake\TestSuite\Fixture\TestFixture $fixture the fixture object to create
-     * @param Connection $db the datasource instance to use
+     * @param \Cake\Database\Connection $db The Connection object instance to use
      * @param array $sources The existing tables in the datasource.
      * @param bool $drop whether drop the fixture if it is already created or not
      * @return void
@@ -215,9 +240,10 @@ class FixtureManager
         } elseif (!$exists) {
             $fixture->create($db);
         } else {
-            $this->_insertionMap[$configName][] = $fixture;
             $fixture->truncate($db);
         }
+
+        $this->_insertionMap[$configName][] = $fixture;
     }
 
     /**
@@ -245,12 +271,23 @@ class FixtureManager
                 if (!isset($this->_insertionMap[$configName])) {
                     $this->_insertionMap[$configName] = [];
                 }
+
+                foreach ($fixtures as $name => $fixture) {
+                    if (in_array($fixture->table, $tables)) {
+                        $fixture->dropConstraints($db);
+                    }
+                }
+
                 foreach ($fixtures as $fixture) {
                     if (!in_array($fixture, $this->_insertionMap[$configName])) {
                         $this->_setupTable($fixture, $db, $tables, $test->dropTables);
                     } else {
                         $fixture->truncate($db);
                     }
+                }
+
+                foreach ($fixtures as $name => $fixture) {
+                    $fixture->createConstraints($db);
                 }
             };
             $this->_runOperation($fixtures, $createTables);
@@ -281,7 +318,7 @@ class FixtureManager
         foreach ($dbs as $connection => $fixtures) {
             $db = ConnectionManager::get($connection, false);
             $logQueries = $db->logQueries();
-            if ($logQueries) {
+            if ($logQueries && !$this->_debug) {
                 $db->logQueries(false);
             }
             $db->transactional(function ($db) use ($fixtures, $operation) {
@@ -326,6 +363,13 @@ class FixtureManager
         }
         $truncate = function ($db, $fixtures) {
             $configName = $db->configName();
+
+            foreach ($fixtures as $name => $fixture) {
+                if ($this->isFixtureSetup($configName, $fixture)) {
+                    $fixture->dropConstraints($db);
+                }
+            }
+
             foreach ($fixtures as $fixture) {
                 if ($this->isFixtureSetup($configName, $fixture)) {
                     $fixture->truncate($db);
@@ -356,9 +400,13 @@ class FixtureManager
                 $sources = $db->schemaCollection()->listTables();
                 $this->_setupTable($fixture, $db, $sources, $dropTables);
             }
+
             if (!$dropTables) {
+                $fixture->dropConstraints($db);
                 $fixture->truncate($db);
             }
+
+            $fixture->createConstraints($db);
             $fixture->insert($db);
         } else {
             throw new UnexpectedValueException(sprintf('Referenced fixture class %s not found', $name));

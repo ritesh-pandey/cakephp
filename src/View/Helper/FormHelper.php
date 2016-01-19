@@ -29,6 +29,7 @@ use Cake\View\Form\EntityContext;
 use Cake\View\Form\FormContext;
 use Cake\View\Form\NullContext;
 use Cake\View\Helper;
+use Cake\View\Helper\SecureFieldTokenTrait;
 use Cake\View\StringTemplateTrait;
 use Cake\View\View;
 use Cake\View\Widget\WidgetRegistry;
@@ -49,6 +50,7 @@ class FormHelper extends Helper
 {
 
     use IdGeneratorTrait;
+    use SecureFieldTokenTrait;
     use StringTemplateTrait;
 
     /**
@@ -546,47 +548,25 @@ class FormHelper extends Helper
      *    generating the hash, else $this->fields is being used.
      * @param array $secureAttributes will be passed as HTML attributes into the hidden
      *    input elements generated for the Security Component.
-     * @return void|string A hidden input field with a security hash
+     * @return string|null A hidden input field with a security hash
      */
     public function secure(array $fields = [], array $secureAttributes = [])
     {
         if (empty($this->request['_Token'])) {
-            return;
-        }
-        $locked = [];
-        $unlockedFields = $this->_unlockedFields;
-
-        foreach ($fields as $key => $value) {
-            if (is_numeric($value)) {
-                $value = (string)$value;
-            }
-            if (!is_int($key)) {
-                $locked[$key] = $value;
-                unset($fields[$key]);
-            }
+            return null;
         }
 
-        sort($unlockedFields, SORT_STRING);
-        sort($fields, SORT_STRING);
-        ksort($locked, SORT_STRING);
-        $fields += $locked;
-
-        $locked = implode(array_keys($locked), '|');
-        $unlocked = implode($unlockedFields, '|');
-        $hashParts = [
+        $tokenData = $this->_buildFieldToken(
             $this->_lastAction,
-            serialize($fields),
-            $unlocked,
-            Security::salt()
-        ];
-        $fields = Security::hash(implode('', $hashParts), 'sha1');
-
+            $fields,
+            $this->_unlockedFields
+        );
         $tokenFields = array_merge($secureAttributes, [
-            'value' => urlencode($fields . ':' . $locked),
+            'value' => $tokenData['fields'],
         ]);
         $out = $this->hidden('_Token.fields', $tokenFields);
         $tokenUnlocked = array_merge($secureAttributes, [
-            'value' => urlencode($unlocked),
+            'value' => $tokenData['unlocked'],
         ]);
         $out .= $this->hidden('_Token.unlocked', $tokenUnlocked);
         return $this->formatTemplate('hiddenBlock', ['content' => $out]);
@@ -599,7 +579,7 @@ class FormHelper extends Helper
      * it from the list of fields.
      *
      * @param string|null $name The dot separated name for the field.
-     * @return mixed Either null, or the list of fields.
+     * @return array|null Either null, or the list of fields.
      * @link http://book.cakephp.org/3.0/en/views/helpers/form.html#working-with-securitycomponent
      */
     public function unlockField($name = null)
@@ -1727,6 +1707,7 @@ class FormHelper extends Helper
      * ### Options
      *
      * - `type` - Set to 'reset' for reset inputs. Defaults to 'submit'
+     * - `templateVars` - Additional template variables for the input element and its container.
      * - Other attributes will be assigned to the input element.
      *
      * @param string $caption The label appearing on the button OR if string contains :// or the
@@ -1742,7 +1723,11 @@ class FormHelper extends Helper
         if (!is_string($caption) && empty($caption)) {
             $caption = __d('cake', 'Submit');
         }
-        $options += ['type' => 'submit', 'secure' => false];
+        $options += [
+            'type' => 'submit',
+            'secure' => false,
+            'templateVars' => []
+        ];
 
         if (isset($options['name'])) {
             $this->_secure($options['secure'], $this->_secureFieldName($options['name']));
@@ -1786,10 +1771,12 @@ class FormHelper extends Helper
         $input = $this->formatTemplate('inputSubmit', [
             'type' => $type,
             'attrs' => $this->templater()->formatAttributes($options),
+            'templateVars' => $options['templateVars']
         ]);
 
         return $this->formatTemplate('submitContainer', [
-            'content' => $input
+            'content' => $input,
+            'templateVars' => $options['templateVars']
         ]);
     }
 
@@ -1833,8 +1820,8 @@ class FormHelper extends Helper
      *
      * ```
      * $options = [
-     *     ['name' => 'United states', 'value' => 'USA'],
-     *     ['name' => 'USA', 'value' => 'USA'],
+     *     ['text' => 'United states', 'value' => 'USA'],
+     *     ['text' => 'USA', 'value' => 'USA'],
      * ];
      * ```
      *
@@ -2368,9 +2355,14 @@ class FormHelper extends Helper
         }
 
         if (!isset($options['name'])) {
+            $endsWithBrackets = '';
+            if (substr($field, -2) === '[]') {
+                $field = substr($field, 0, -2);
+                $endsWithBrackets = '[]';
+            }
             $parts = explode('.', $field);
             $first = array_shift($parts);
-            $options['name'] = $first . ($parts ? '[' . implode('][', $parts) . ']' : '');
+            $options['name'] = $first . (!empty($parts) ? '[' . implode('][', $parts) . ']' : '') . $endsWithBrackets;
         }
 
         if (isset($options['value']) && !isset($options['val'])) {
